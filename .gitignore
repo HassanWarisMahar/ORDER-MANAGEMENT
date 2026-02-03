@@ -1,0 +1,37 @@
+# Maven/Gradle build output
+target/
+build/
+
+# Maven wrapper and logs
+.mvn/wrapper/maven-wrapper.jar
+logs/
+*.log
+
+# IDEs and editors
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java artifacts
+*.class
+*.jar
+*.war
+*.ear
+
+# Test/coverage reports
+surefire-reports/
+failsafe-reports/
+coverage/
+*.exec
+
+# Local env files
+.env
+.env.*
