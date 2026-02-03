@@ -1,0 +1,4 @@
+logging:
+  level:
+    com.microservices: INFO
+    org.springframework.cloud.gateway: INFO

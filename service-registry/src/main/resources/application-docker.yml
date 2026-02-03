@@ -1,0 +1,29 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: service-registry
+
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE:http://service-registry:8761/eureka/}
+
+logging:
+  file:
+    name: ${LOGGING_FILE_NAME:/logs/app.log}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}

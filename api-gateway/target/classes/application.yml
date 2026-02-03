@@ -1,0 +1,135 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # User Service Swagger
+        - id: user-service-swagger
+          uri: lb://user-service
+          predicates:
+            - Path=/user-service/swagger-ui/**, /user-service/api-docs/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /user-service
+
+        # Order Service Swagger
+        - id: order-service-swagger
+          uri: lb://order-service
+          predicates:
+            - Path=/order-service/swagger-ui/**, /order-service/api-docs/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /order-service
+
+        # Inventory Service Swagger
+        - id: inventory-service-swagger
+          uri: lb://inventory-service
+          predicates:
+            - Path=/inventory-service/swagger-ui/**, /inventory-service/api-docs/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /inventory-service
+
+        # User Service Routes
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**, /api/auth/**
+          filters:
+            - StripPrefix=0
+            - name: CircuitBreaker
+              args:
+                name: userServiceCircuitBreaker
+                fallbackUri: forward:/fallback/user-service
+        
+        # Order Service Routes
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - StripPrefix=0
+            - name: JwtAuthenticationFilter
+            - name: CircuitBreaker
+              args:
+                name: orderServiceCircuitBreaker
+                fallbackUri: forward:/fallback/order-service
+        
+        # Inventory Service Routes
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/inventory/**, /api/products/**
+          filters:
+            - StripPrefix=0
+            - name: JwtAuthenticationFilter
+            - name: CircuitBreaker
+              args:
+                name: inventoryServiceCircuitBreaker
+                fallbackUri: forward:/fallback/inventory-service
+        
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-must-be-at-least-32-characters-long-for-production-use}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+# Gateway internal access token
+gateway:
+  internal-token: ${GATEWAY_INTERNAL_TOKEN:gombey-gateway-internal-token}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE:http://localhost:8761/eureka/}
+
+logging:
+  level:
+    com.microservices: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      userServiceCircuitBreaker:
+        baseConfig: default
+      orderServiceCircuitBreaker:
+        baseConfig: default
+      inventoryServiceCircuitBreaker:
+        baseConfig: default
