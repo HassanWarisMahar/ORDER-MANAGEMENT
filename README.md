@@ -92,7 +92,7 @@ A production-ready microservices project demonstrating a multi-service system wi
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd "Order Management and Inventory Service"
+   cd "ORDER-MANAGEMENT"
    ```
 
 2. **Start all services**
