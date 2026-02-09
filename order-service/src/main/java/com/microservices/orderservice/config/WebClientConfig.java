@@ -18,6 +18,9 @@ public class WebClientConfig {
     @Value("${inventory.service.url:http://inventory-service:8082}")
     private String inventoryServiceUrl;
 
+    @Value("${payment.service.url:http://payment-service:8084}")
+    private String paymentServiceUrl;
+
     @Value("${user.service.url:http://user-service:8083}")
     private String userServiceUrl;
 
@@ -34,22 +37,33 @@ public class WebClientConfig {
 
     @Bean
     public WebClient inventoryWebClient(WebClient.Builder webClientBuilder) {
-        // Add filter to inject JWT token for each request
-        ExchangeFilterFunction authFilter = ExchangeFilterFunction.ofRequestProcessor(
+        ExchangeFilterFunction authFilter = buildAuthFilter(webClientBuilder);
+        return webClientBuilder
+                .baseUrl(inventoryServiceUrl)
+                .filter(authFilter)
+                .build();
+    }
+
+    @Bean
+    public WebClient paymentWebClient(WebClient.Builder webClientBuilder) {
+        ExchangeFilterFunction authFilter = buildAuthFilter(webClientBuilder);
+        return webClientBuilder
+                .baseUrl(paymentServiceUrl)
+                .filter(authFilter)
+                .build();
+    }
+
+    private ExchangeFilterFunction buildAuthFilter(WebClient.Builder webClientBuilder) {
+        return ExchangeFilterFunction.ofRequestProcessor(
             clientRequest -> {
-                // Fetch service token from user-service for each inter-service call
                 String serviceToken = fetchServiceToken(webClientBuilder);
                 ClientRequest authenticatedRequest = ClientRequest.from(clientRequest)
+                        .header("X-Gateway-Token", gatewayInternalToken)
                         .header("Authorization", "Bearer " + serviceToken)
                         .build();
                 return Mono.just(authenticatedRequest);
             }
         );
-        
-        return webClientBuilder
-                .baseUrl(inventoryServiceUrl)
-                .filter(authFilter)
-                .build();
     }
 
     private String fetchServiceToken(WebClient.Builder webClientBuilder) {
@@ -98,4 +112,5 @@ public class WebClientConfig {
         public String tokenType;
         public Long expiresIn;
     }
+
 }

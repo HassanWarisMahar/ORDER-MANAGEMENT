@@ -30,6 +30,10 @@ inventory:
   service:
     url: ${INVENTORY_SERVICE_URL:http://api-gateway:8080}
 
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://payment-service:8084}
+
 user:
   service:
     url: ${USER_SERVICE_URL:http://user-service:8083}

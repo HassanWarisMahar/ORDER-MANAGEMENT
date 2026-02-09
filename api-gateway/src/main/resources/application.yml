@@ -34,6 +34,15 @@ spring:
             - StripPrefix=1
             - AddRequestHeader=X-Forwarded-Prefix, /inventory-service
 
+        # Payment Service Swagger
+        - id: payment-service-swagger
+          uri: lb://payment-service
+          predicates:
+            - Path=/payment-service/swagger-ui/**, /payment-service/api-docs/**
+          filters:
+            - StripPrefix=1
+            - AddRequestHeader=X-Forwarded-Prefix, /payment-service
+
         # User Service Routes
         - id: user-service
           uri: lb://user-service
@@ -71,6 +80,19 @@ spring:
               args:
                 name: inventoryServiceCircuitBreaker
                 fallbackUri: forward:/fallback/inventory-service
+
+        # Payment Service Routes
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - StripPrefix=0
+            - name: JwtAuthenticationFilter
+            - name: CircuitBreaker
+              args:
+                name: paymentServiceCircuitBreaker
+                fallbackUri: forward:/fallback/payment-service
         
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
@@ -132,4 +154,6 @@ resilience4j:
       orderServiceCircuitBreaker:
         baseConfig: default
       inventoryServiceCircuitBreaker:
+        baseConfig: default
+      paymentServiceCircuitBreaker:
         baseConfig: default

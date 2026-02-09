@@ -1,6 +1,7 @@
-# Microservices Project: Order Management and Inventory Service
+# Microservices Project: Order Management and Inventory Service (ORDER-MANAGEMENT)
 
 A production-ready microservices project demonstrating a multi-service system with a dedicated User Management Service and an API Gateway for centralized routing and authentication.
+Repository directory: `ORDER-MANAGEMENT`.
 
 ## 🏗️ Architecture
 
@@ -193,6 +194,24 @@ mvn test
 - ✅ Integration tests for inter-service communication
 - ✅ Edge case testing
 - ✅ Error handling tests
+
+## ✅ CI/CD (Jenkins)
+
+This repo includes a `Jenkinsfile` that runs a full Maven build and tests for all services.
+
+### Jenkins Setup (Pipeline from SCM)
+
+1. Install Jenkins and configure a build agent with:
+   - JDK 25
+   - Maven 3.9+
+2. Create a new Pipeline job:
+   - Definition: "Pipeline script from SCM"
+   - SCM: Git
+   - Script Path: `Jenkinsfile`
+3. Run the job. It executes:
+   - `mvn -B -ntp clean verify`
+
+Artifacts (`**/target/*.jar`) and test reports (`**/target/surefire-reports/*.xml`) are archived automatically.
 
 ## 🐳 Docker
 

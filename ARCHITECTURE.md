@@ -3,6 +3,7 @@
 ## Overview
 
 This project implements a microservices architecture with a dedicated User Management Service and an API Gateway for centralized routing and authentication.
+Repository directory: `ORDER-MANAGEMENT`.
 
 ## Architecture Diagram
 
@@ -257,6 +258,12 @@ curl -X POST http://localhost:8080/api/orders \
 **Logs:** OpenSearch + OpenSearch Dashboards (Filebeat shipping)
 
 Each service exposes `/actuator/health` and `/actuator/prometheus`. Traces are exported to Zipkin and logs are written to `/logs/app.log` in Docker.
+
+## CI/CD Pipeline
+
+Jenkins provides a CI pipeline via the repository `Jenkinsfile`:
+- Runs `mvn -B -ntp clean verify` to build and test all modules.
+- Archives `**/target/*.jar` and publishes test reports from `**/target/surefire-reports/*.xml`.
 
 ## Benefits of This Architecture
 

@@ -20,6 +20,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final WebClient inventoryWebClient;
+    private final WebClient paymentWebClient;
 
     @Transactional
     public OrderResponse createOrder(OrderRequest request) {
@@ -66,6 +67,7 @@ public class OrderService {
 
         order.setTotalAmount(totalAmount);
         Order savedOrder = orderRepository.save(order);
+        createPaymentForOrder(savedOrder);
         log.info("Order created successfully with ID: {}", savedOrder.getId());
         return OrderResponse.fromEntity(savedOrder);
     }
@@ -127,6 +129,28 @@ public class OrderService {
         } catch (WebClientResponseException e) {
             log.error("Error fetching item stock for: {}", itemCode, e);
             throw new RuntimeException("Error fetching item details: " + e.getMessage());
+        }
+    }
+
+    private void createPaymentForOrder(Order order) {
+        PaymentRequest paymentRequest = new PaymentRequest(
+                order.getId(),
+                order.getTotalAmount(),
+                "USD",
+                "CARD"
+        );
+        try {
+            paymentWebClient
+                    .post()
+                    .uri("/api/payments")
+                    .bodyValue(paymentRequest)
+                    .retrieve()
+                    .bodyToMono(PaymentResponse.class)
+                    .block();
+            log.info("Payment created for orderId={}", order.getId());
+        } catch (WebClientResponseException e) {
+            log.error("Error creating payment for orderId={}", order.getId(), e);
+            throw new RuntimeException("Error creating payment: " + e.getMessage());
         }
     }
 
