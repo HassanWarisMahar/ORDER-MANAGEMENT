@@ -2,12 +2,12 @@
 
 ## Overview
 
-Inventory Service is a microservice responsible for managing inventory stock levels. It provides item availability information and handles stock decrease operations when orders are placed.
+Inventory Service manages stock levels and provides **atomic** decrease (reserve) operations. When multiple users order the same last unit, only one decrease succeeds; the other receives **409 Conflict** (Insufficient stock). Decrease uses a conditional UPDATE in the database (`WHERE available_stock >= :quantity`) so no distributed locks are needed.
 
 ## Technology Stack
 
 - **Java 25** (LTS)
-- **Spring Boot 3.3.5**
+- **Spring Boot 3.4.10**
 - **Spring Data JPA**
 - **SQLite**
 - **REST APIs**
@@ -52,7 +52,7 @@ Retrieves the available stock for a specific item code.
 - `404 Not Found`: Item not found with the provided code
 
 ### POST /api/inventory/decrease
-Decreases the stock quantity for a specific item.
+**Atomically** decreases (reserves) stock. Uses a conditional UPDATE so only one concurrent request can succeed when stock is limited.
 
 **Request Body:**
 ```json
@@ -74,8 +74,19 @@ Decreases the stock quantity for a specific item.
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Insufficient stock or validation errors
+- `409 Conflict`: Insufficient stock (e.g. concurrent order for last unit)
 - `404 Not Found`: Item not found with the provided code
+
+### POST /api/inventory/add
+Increases the stock quantity for a specific item (e.g. restock or compensation after a failed multi-item order).
+
+**Request Body:**
+```json
+{
+  "itemCode": "ITEM-001",
+  "quantity": 10
+}
+```
 
 ## Data Model
 
@@ -92,10 +103,11 @@ Decreases the stock quantity for a specific item.
 
 ## Error Handling
 
-The service includes global exception handling via `@ControllerAdvice`:
+Global exception handling via `@ControllerAdvice`:
 
-- **400 Bad Request**: Validation errors, insufficient stock
+- **400 Bad Request**: Validation errors
 - **404 Not Found**: Item not found
+- **409 Conflict**: Insufficient stock (used for concurrent-order safety)
 - **500 Internal Server Error**: Unexpected errors
 
 ## Local Development
@@ -251,10 +263,10 @@ inventory-service/
 
 ## Business Rules
 
-1. **Stock Validation**: Stock cannot go below zero
-2. **Item Uniqueness**: Each item code must be unique
-3. **Atomic Operations**: Stock decrease operations are transactional
-4. **Availability Check**: Stock availability is checked before decrease operations
+1. **Atomic Decrease**: Decrease uses a single conditional UPDATE (`WHERE available_stock >= :quantity`); only one concurrent request succeeds when stock is limited.
+2. **Stock Validation**: Stock cannot go below zero (enforced by the conditional UPDATE).
+3. **Item Uniqueness**: Each item code must be unique.
+4. **409 on Insufficient Stock**: When the conditional UPDATE affects 0 rows, the API returns 409 Conflict so callers (e.g. Order Service) can avoid creating orders and compensate if needed.
 
 ## License
 

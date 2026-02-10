@@ -51,7 +51,17 @@ mvn spring-boot:run
 
 Wait for the message: `Started OrderServiceApplication in X.XXX seconds`
 
-#### Terminal 4 - Start API Gateway
+#### Terminal 4 - Start Payment Service
+
+```bash
+cd payment-service
+set GATEWAY_INTERNAL_TOKEN=gombey-gateway-internal-token
+mvn spring-boot:run
+```
+
+Wait for the message: `Started PaymentServiceApplication in X.XXX seconds`
+
+#### Terminal 5 - Start API Gateway
 
 ```bash
 cd api-gateway
@@ -94,6 +104,14 @@ set GATEWAY_INTERNAL_TOKEN=gombey-gateway-internal-token
 start "Order Service" cmd /k "mvn spring-boot:run"
 ```
 
+#### Start Payment Service in Background
+
+```bash
+cd payment-service
+set GATEWAY_INTERNAL_TOKEN=gombey-gateway-internal-token
+start "Payment Service" cmd /k "mvn spring-boot:run"
+```
+
 #### Start API Gateway in Background
 
 ```bash
@@ -109,6 +127,7 @@ start "API Gateway" cmd /k "mvn spring-boot:run"
 3. **User Service**: http://localhost:8083 (direct access blocked without gateway token)
 4. **Inventory Service**: http://localhost:8082 (direct access blocked without gateway token)
 5. **Order Service**: http://localhost:8081 (direct access blocked without gateway token)
+6. **Payment Service**: http://localhost:8084 (direct access blocked without gateway token)
 
 ## Test the Services
 

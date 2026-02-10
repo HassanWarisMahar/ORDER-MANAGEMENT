@@ -6,22 +6,32 @@ Repository directory: `ORDER-MANAGEMENT`.
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      API Gateway (8080)                     │
-│              - Route Management                             │
-│              - JWT Authentication                           │
-└──────────────┬──────────────┬──────────────┬────────────────┘
-               │              │              │
-    ┌──────────▼──────┐  ┌───▼──────┐  ┌───▼──────────┐
-    │  User Service   │  │  Order   │  │  Inventory   │
-    │    (8083)       │  │ Service  │  │  Service     │
-    │ - Auth          │  │  (8081)  │  │   (8082)     │
-    │ - User Mgmt     │  │ - Orders │  │ - Inventory  │
-    │ - JWT Gen       │  │          │  │ - Products   │
-    └─────────────────┘  └──────────┘  └──────────────┘
+                    ┌─────────────────────────────────────────┐
+                    │     Service Registry / Eureka (8761)    │
+                    └────────────────────┬────────────────────┘
+                                         │
+┌────────────────────────────────────────┼────────────────────────────────────────┐
+│                      API Gateway (8080)│                                        │
+│              - Route Management        │  - JWT Authentication                  │
+└──────────────┬──────────────┬──────────┴────────────┬───────────────────────────┘
+               │              │                       │             │
+    ┌──────────▼──────┐  ┌────▼─────┐  ┌──────────────▼──────┐  ┌───▼──────────┐
+    │  User Service   │  │  Order   │  │  Payment Service    │  │  Inventory   │
+    │    (8083)       │  │ Service  │  │     (8084)          │  │  Service     │
+    │ - Auth          │  │  (8081)  │  │ - Create payment    │  │   (8082)     │
+    │ - User Mgmt     │  │ - Orders │  │ - Get by order      │  │ - Inventory  │
+    │ - JWT Gen       │  │ - Reserve│  │                     │  │ - Products   │
+    └─────────────────┘  └────┬─────┘  └─────────────────────┘  └──────────────┘
+                              │                    │                     ▲
+                              └────────────────────┴─────────────────────┘
+                                    (Order → Gateway → Inventory / Payment)
 ```
 
 ## 📋 Services
+
+### 0. Service Registry
+- **Port**: 8761
+- **Responsibilities**: Eureka server for service discovery; enables load-balanced routing via the API Gateway.
 
 ### 1. API Gateway
 - **Port**: 8080
@@ -62,11 +72,20 @@ Repository directory: `ORDER-MANAGEMENT`.
 - **Responsibilities**:
   - Manage inventory stock levels
   - Provide item availability information
-  - Decrease stock when orders are placed
+  - **Atomic** decrease when orders reserve stock (prevents overselling under concurrent requests)
 - **Key Features**:
-  - RESTful APIs for inventory management
-  - Stock validation and decrease operations
-  - Real-time stock availability
+  - RESTful APIs for inventory management (get stock, decrease, add)
+  - Conditional UPDATE in DB for concurrent-order safety
+  - Returns 409 Conflict when stock is insufficient
+
+### 5. Payment Service
+- **Port**: 8084
+- **Responsibilities**:
+  - Create payment records when orders are placed (called by Order Service via Gateway)
+  - Retrieve payment by order ID
+- **Key Features**:
+  - RESTful APIs for payments
+  - JWT and gateway-token protection
 
 ## 🛠️ Technology Stack
 
@@ -103,13 +122,17 @@ Repository directory: `ORDER-MANAGEMENT`.
 
 3. **Access the services**
    - API Gateway: http://localhost:8080
+   - Service Registry: http://localhost:8761
    - User Service: http://localhost:8083
    - Order Service: http://localhost:8081
    - Inventory Service: http://localhost:8082
+   - Payment Service: http://localhost:8084
    - Gateway entrypoint for APIs: http://localhost:8080
    - Direct service access is blocked without the gateway token header
 
 ### Option 2: Local Development
+
+Start **Service Registry** first, then the other services (see [RUN_LOCALLY.md](RUN_LOCALLY.md) for full steps including Payment Service).
 
 #### Start User Service
 
@@ -131,6 +154,14 @@ mvn spring-boot:run
 
 ```bash
 cd order-service
+mvn clean install
+mvn spring-boot:run
+```
+
+#### Start Payment Service
+
+```bash
+cd payment-service
 mvn clean install
 mvn spring-boot:run
 ```
@@ -158,15 +189,22 @@ mvn spring-boot:run
 ### Inventory Service
 
 - **GET** `/api/inventory/{itemCode}` - Get available stock
-- **POST** `/api/inventory/decrease` - Decrease item stock
+- **POST** `/api/inventory/decrease` - Decrease (reserve) item stock (atomic; returns 409 if insufficient)
+- **POST** `/api/inventory/add` - Add item stock
+
+### Payment Service
+
+- **POST** `/api/payments` - Create a payment for an order
+- **GET** `/api/payments/order/{orderId}` - Get payment by order ID
 
 ## 📖 API Documentation
 
-Both services provide OpenAPI/Swagger documentation:
+All services provide OpenAPI/Swagger documentation (via Gateway or direct with `X-Gateway-Token`):
 
 - **User Service**: http://localhost:8083/swagger-ui.html
 - **Order Service**: http://localhost:8081/swagger-ui.html
 - **Inventory Service**: http://localhost:8082/swagger-ui.html
+- **Payment Service**: http://localhost:8084/swagger-ui.html
 
 Note: direct access to service ports requires the `X-Gateway-Token` header.
 
@@ -185,6 +223,10 @@ mvn test
 
 # User Service
 cd user-service
+mvn test
+
+# Payment Service
+cd payment-service
 mvn test
 ```
 
@@ -233,6 +275,10 @@ docker build -t order-service:latest .
 # Inventory Service
 cd inventory-service
 docker build -t inventory-service:latest .
+
+# Payment Service
+cd payment-service
+docker build -t payment-service:latest .
 ```
 
 ### Docker Compose
@@ -257,49 +303,19 @@ docker-compose logs -f
 
 ```
 .
-├── api-gateway/
-│   ├── Dockerfile
-│   ├── pom.xml
-│   └── src/
-├── user-service/
-│   ├── Dockerfile
-│   ├── pom.xml
-│   └── src/
-├── order-service/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/
-│   │   │   │   └── com/microservices/orderservice/
-│   │   │   │       ├── config/
-│   │   │   │       ├── controller/
-│   │   │   │       ├── dto/
-│   │   │   │       ├── exception/
-│   │   │   │       ├── model/
-│   │   │   │       ├── repository/
-│   │   │   │       └── service/
-│   │   │   └── resources/
-│   │   └── test/
-│   ├── Dockerfile
-│   ├── pom.xml
-│   └── README.md
-├── inventory-service/
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/
-│   │   │   │   └── com/microservices/inventoryservice/
-│   │   │   │       ├── controller/
-│   │   │   │       ├── dto/
-│   │   │   │       ├── exception/
-│   │   │   │       ├── model/
-│   │   │   │       ├── repository/
-│   │   │   │       └── service/
-│   │   │   └── resources/
-│   │   └── test/
-│   ├── Dockerfile
-│   ├── pom.xml
-│   └── README.md
+├── api-gateway/           # Gateway, JWT, routes, circuit breaker
+├── service-registry/      # Eureka server (8761)
+├── user-service/         # Auth, signup, login, JWT (8083)
+├── order-service/        # Orders, reserve stock, payment (8081)
+├── inventory-service/    # Stock, atomic decrease, products (8082)
+├── payment-service/      # Payments per order (8084)
+├── observability/        # Prometheus, Filebeat configs
+├── scripts/              # Auth config, observability helpers
 ├── docker-compose.yml
-└── README.md
+├── README.md
+├── ARCHITECTURE.md
+├── RUN_LOCALLY.md
+└── SECURITY_IMPLEMENTATION.md
 ```
 
 ## 🔧 Configuration
@@ -320,13 +336,19 @@ docker-compose logs -f
 - `EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE`: Eureka URL (default: `http://localhost:8761/eureka/`)
 
 **Order Service:**
-- `INVENTORY_SERVICE_URL`: Inventory Service URL (default: `http://localhost:8080`)
+- `INVENTORY_SERVICE_URL`: Inventory via Gateway (default: `http://localhost:8080`)
+- `PAYMENT_SERVICE_URL`: Payment via Gateway (default: `http://localhost:8084` or `http://localhost:8080` when using gateway)
 - `SERVER_PORT`: Server port (default: `8081`)
 - `GATEWAY_INTERNAL_TOKEN`: Must match gateway token
 - `EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE`: Eureka URL (default: `http://localhost:8761/eureka/`)
 
 **Inventory Service:**
 - `SERVER_PORT`: Server port (default: `8082`)
+- `GATEWAY_INTERNAL_TOKEN`: Must match gateway token
+- `EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE`: Eureka URL (default: `http://localhost:8761/eureka/`)
+
+**Payment Service:**
+- `SERVER_PORT`: Server port (default: `8084`)
 - `GATEWAY_INTERNAL_TOKEN`: Must match gateway token
 - `EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE`: Eureka URL (default: `http://localhost:8761/eureka/`)
 
@@ -338,19 +360,20 @@ docker-compose logs -f
 - ✅ BCrypt password hashing
 
 ### Order Service
-- ✅ Clean layered architecture
-- ✅ Inter-service communication with WebClient
-- ✅ Stock validation before order creation
-- ✅ Automatic stock decrease on order confirmation
-- ✅ Comprehensive error handling
-- ✅ OpenAPI documentation
+- ✅ Reserve stock first (atomic), then create order and payment
+- ✅ Prevents overselling when multiple users order the same last unit (409 for second user)
+- ✅ Compensation: if a later item fails reserve, earlier reserves are rolled back via add-stock
+- ✅ Inter-service communication with WebClient (Inventory + Payment via Gateway)
+- ✅ 409 Conflict for insufficient stock; OpenAPI documentation
 
 ### Inventory Service
-- ✅ Clean layered architecture
-- ✅ Stock availability queries
-- ✅ Atomic stock decrease operations
-- ✅ Validation and error handling
-- ✅ OpenAPI documentation
+- ✅ Atomic stock decrease (conditional UPDATE in DB; no race when concurrent orders)
+- ✅ Stock availability and add-stock APIs; 409 Conflict when insufficient stock
+- ✅ Validation and error handling; OpenAPI documentation
+
+### Payment Service
+- ✅ Create payment per order; get payment by order ID
+- ✅ Gateway and JWT protection; OpenAPI documentation
 
 ## 📝 Example Usage
 
@@ -422,10 +445,12 @@ curl http://localhost:8080/api/orders/1 \
 
 ## 📚 Additional Documentation
 
+- [ARCHITECTURE.md](ARCHITECTURE.md) – Services, auth flows, concurrent orders & inventory
+- [RUN_LOCALLY.md](RUN_LOCALLY.md) – Run all services locally (including Payment Service)
+- [SECURITY_IMPLEMENTATION.md](SECURITY_IMPLEMENTATION.md) – JWT and gateway security
 - [Order Service README](order-service/README.md)
 - [Inventory Service README](inventory-service/README.md)
-- [ARCHITECTURE.md](ARCHITECTURE.md)
-- [OBSERVABILITY.md](OBSERVABILITY.md)
+- [Payment Service README](payment-service/README.md)
 
 ## 🔍 Monitoring
 
@@ -433,10 +458,11 @@ curl http://localhost:8080/api/orders/1 \
 
 All services expose health and metrics via Spring Actuator:
 - API Gateway: http://localhost:8080/actuator/health
+- Service Registry: http://localhost:8761/actuator/health
 - User Service: http://localhost:8083/actuator/health
 - Order Service: http://localhost:8081/actuator/health
 - Inventory Service: http://localhost:8082/actuator/health
-- Service Registry: http://localhost:8761/actuator/health
+- Payment Service: http://localhost:8084/actuator/health
 
 ### Observability Stack (Docker Compose)
 

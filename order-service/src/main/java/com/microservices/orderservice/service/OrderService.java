@@ -22,21 +22,40 @@ public class OrderService {
     private final WebClient inventoryWebClient;
     private final WebClient paymentWebClient;
 
+    /**
+     * Create order only after stock is atomically reserved (decreased) in Inventory.
+     * This prevents overselling when multiple users order the same last unit:
+     * - Inventory uses conditional UPDATE (stock only decreased if stock >= quantity).
+     * - One request succeeds; others get 409 Insufficient stock and no order is created.
+     * For multi-item orders, if a later item fails we compensate (add back) earlier decreases.
+     */
     @Transactional
     public OrderResponse createOrder(OrderRequest request) {
         log.info("Creating order for customer: {}", request.getCustomerEmail());
-        
-        // Validate and check stock availability for all items
-        for (OrderItemRequest itemRequest : request.getItems()) {
-            validateItemAvailability(itemRequest.getItemCode(), itemRequest.getQuantity());
+
+        // 1. Reserve stock first (atomic decrease). On any failure, compensate and rethrow.
+        java.util.List<OrderItemRequest> items = request.getItems();
+        int succeeded = 0;
+        try {
+            for (OrderItemRequest itemRequest : items) {
+                decreaseItemStock(itemRequest.getItemCode(), itemRequest.getQuantity());
+                succeeded++;
+            }
+        } catch (RuntimeException e) {
+            // Compensate: add back stock for items we already decreased
+            for (int i = 0; i < succeeded; i++) {
+                OrderItemRequest itemRequest = items.get(i);
+                try {
+                    addItemStock(itemRequest.getItemCode(), itemRequest.getQuantity());
+                    log.info("Compensated stock for item: {} (+{})", itemRequest.getItemCode(), itemRequest.getQuantity());
+                } catch (Exception ex) {
+                    log.error("Compensation failed for item {}: {}", itemRequest.getItemCode(), ex.getMessage());
+                }
+            }
+            throw e;
         }
-        
-        // Decrease stock for all items
-        for (OrderItemRequest itemRequest : request.getItems()) {
-            decreaseItemStock(itemRequest.getItemCode(), itemRequest.getQuantity());
-        }
-        
-        // Create order
+
+        // 2. Build and persist order (stock already reserved)
         Order order = new Order();
         order.setCustomerName(request.getCustomerName());
         order.setCustomerEmail(request.getCustomerEmail());
@@ -44,23 +63,20 @@ public class OrderService {
 
         BigDecimal totalAmount = BigDecimal.ZERO;
 
-        for (OrderItemRequest itemRequest : request.getItems()) {
-            // Fetch item details from inventory
+        for (OrderItemRequest itemRequest : items) {
             InventoryStockResponse stockResponse = getItemStock(itemRequest.getItemCode());
-            
+
             OrderItem item = new OrderItem();
             item.setOrder(order);
             item.setItemCode(itemRequest.getItemCode());
             item.setItemName(stockResponse.getItemName());
             item.setQuantity(itemRequest.getQuantity());
-            // Note: In a real scenario, price would come from inventory or a pricing service
-            // For now, we'll use a default or fetch from inventory
-            BigDecimal price = BigDecimal.valueOf(10.00); // Default price
+            BigDecimal price = BigDecimal.valueOf(10.00);
             item.setPrice(price);
-            
+
             BigDecimal subtotal = price.multiply(BigDecimal.valueOf(itemRequest.getQuantity()));
             item.setSubtotal(subtotal);
-            
+
             totalAmount = totalAmount.add(subtotal);
             order.getItems().add(item);
         }
@@ -71,33 +87,9 @@ public class OrderService {
         log.info("Order created successfully with ID: {}", savedOrder.getId());
         return OrderResponse.fromEntity(savedOrder);
     }
-    
-    private void validateItemAvailability(String itemCode, Integer quantity) {
-        log.info("Validating availability for item: {}, quantity: {}", itemCode, quantity);
-        try {
-            InventoryStockResponse response = inventoryWebClient
-                    .get()
-                    .uri("/api/inventory/{itemCode}", itemCode)
-                    .retrieve()
-                    .bodyToMono(InventoryStockResponse.class)
-                    .block();
-            
-            if (response == null || response.getAvailableStock() < quantity) {
-                throw new RuntimeException("Insufficient stock for item: " + itemCode + 
-                        ". Available: " + (response != null ? response.getAvailableStock() : 0) + 
-                        ", Requested: " + quantity);
-            }
-            log.info("Stock validation successful for item: {}", itemCode);
-        } catch (WebClientResponseException.NotFound e) {
-            throw new RuntimeException("Item not found: " + itemCode);
-        } catch (WebClientResponseException e) {
-            log.error("Error validating stock for item: {}", itemCode, e);
-            throw new RuntimeException("Error validating stock: " + e.getMessage());
-        }
-    }
-    
+
     private void decreaseItemStock(String itemCode, Integer quantity) {
-        log.info("Decreasing stock for item: {}, quantity: {}", itemCode, quantity);
+        log.info("Reserving stock for item: {}, quantity: {}", itemCode, quantity);
         try {
             DecreaseStockRequest decreaseRequest = new DecreaseStockRequest(itemCode, quantity);
             DecreaseStockResponse response = inventoryWebClient
@@ -107,15 +99,30 @@ public class OrderService {
                     .retrieve()
                     .bodyToMono(DecreaseStockResponse.class)
                     .block();
-            
-            if (response == null || !response.getSuccess()) {
-                throw new RuntimeException("Failed to decrease stock for item: " + itemCode);
+
+            if (response == null || !Boolean.TRUE.equals(response.getSuccess())) {
+                throw new RuntimeException("Failed to reserve stock for item: " + itemCode);
             }
-            log.info("Stock decreased successfully for item: {}", itemCode);
+            log.info("Stock reserved for item: {}", itemCode);
+        } catch (WebClientResponseException.NotFound e) {
+            throw new RuntimeException("Item not found: " + itemCode);
         } catch (WebClientResponseException e) {
-            log.error("Error decreasing stock for item: {}", itemCode, e);
-            throw new RuntimeException("Error decreasing stock: " + e.getMessage());
+            String body = e.getResponseBodyAsString();
+            if (e.getStatusCode() != null && e.getStatusCode().value() == 409) {
+                throw new RuntimeException("Insufficient stock for item: " + itemCode + ". " + (body != null ? body : e.getMessage()));
+            }
+            throw new RuntimeException("Error reserving stock: " + e.getMessage());
         }
+    }
+
+    private void addItemStock(String itemCode, Integer quantity) {
+        inventoryWebClient
+                .post()
+                .uri("/api/inventory/add")
+                .bodyValue(new AddStockRequest(itemCode, quantity))
+                .retrieve()
+                .bodyToMono(AddStockResponse.class)
+                .block();
     }
     
     private InventoryStockResponse getItemStock(String itemCode) {

@@ -8,21 +8,25 @@ Repository directory: `ORDER-MANAGEMENT`.
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      API Gateway (8080)                     │
-│              - Route Management                             │
-│              - JWT Authentication                           │
-│              - Request/Response Filtering                   │
-└──────────────┬──────────────┬──────────────┬────────────────┘
-               │              │              │
-    ┌──────────▼──────┐   ┌───▼──────┐   ┌───▼──────────┐
-    │  User Service   │   │  Order   │   │  Inventory   │
-    │    (8083)       │   │ Service  │   │  Service     │
-    │                 │   │  (8081)  │   │   (8082)     │
-    │ - Auth          │   │          │   │              │
-    │ - User Mgmt     │   │ - Orders │   │ - Inventory  │
-    │ - JWT Gen       │   │          │   │ - Products   │
-    └─────────────────┘   └──────────┘   └──────────────┘
+                    ┌─────────────────────────────────────────┐
+                    │     Service Registry / Eureka (8761)     │
+                    └────────────────────┬────────────────────┘
+                                         │
+┌────────────────────────────────────────┼────────────────────────────────────────┐
+│                      API Gateway (8080) │                                         │
+│              - Route Management         │  - JWT Authentication                   │
+└──────────────┬──────────────┬───────────┴───────────┬──────────────┬──────────────┘
+               │              │                       │              │
+    ┌──────────▼──────┐  ┌────▼─────┐  ┌──────────────▼──────┐  ┌───▼──────────┐
+    │  User Service   │  │  Order   │  │  Payment Service    │  │  Inventory   │
+    │    (8083)       │  │ Service  │  │     (8084)           │  │  Service     │
+    │ - Auth          │  │  (8081)  │  │ - Create payment    │  │   (8082)     │
+    │ - User Mgmt     │  │ - Orders │  │ - Get by order      │  │ - Inventory  │
+    │ - JWT Gen       │  │ - Reserve│  │                     │  │ - Products   │
+    └─────────────────┘  └────┬─────┘  └─────────────────────┘  └──────────────┘
+                               │                    │                     ▲
+                               └────────────────────┴─────────────────────┘
+                                     (Order → Gateway → Inventory / Payment)
 ```
 
 ## Services
@@ -52,6 +56,7 @@ Repository directory: `ORDER-MANAGEMENT`.
 - `/api/orders/**` → Order Service (authenticated)
 - `/api/inventory/**` → Inventory Service (authenticated)
 - `/api/products/**` → Inventory Service (authenticated)
+- `/api/payments/**` → Payment Service (authenticated)
 
 **Features:**
 - JWT validation filter for protected routes
@@ -96,13 +101,28 @@ Repository directory: `ORDER-MANAGEMENT`.
 **Responsibilities:**
 - Inventory stock management
 - Product management
-- Stock validation and decrease operations
+- **Atomic** stock decrease (conditional UPDATE; prevents overselling under concurrent orders)
+- Returns 409 Conflict when insufficient stock
 
 **Endpoints:**
 - `GET /api/inventory/{itemCode}` - Get available stock (authenticated)
-- `POST /api/inventory/decrease` - Decrease stock (authenticated)
+- `POST /api/inventory/decrease` - Decrease (reserve) stock atomically (authenticated; 409 if insufficient)
+- `POST /api/inventory/add` - Add stock (authenticated)
 - `GET /api/products` - Get all products (authenticated)
 - `POST /api/products` - Create product (authenticated)
+
+**Database:** SQLite
+
+### 5. Payment Service (Port 8084)
+**Technology:** Spring Boot 3.4.10, Spring Security
+
+**Responsibilities:**
+- Create payment records when orders are placed (called by Order Service via Gateway)
+- Retrieve payment by order ID
+
+**Endpoints:**
+- `POST /api/payments` - Create payment (authenticated)
+- `GET /api/payments/order/{orderId}` - Get payment by order ID (authenticated)
 
 **Database:** SQLite
 
@@ -157,6 +177,21 @@ Order Service → API Gateway → Inventory Service
 - Inventory blocks direct access without gateway token
 ```
 
+### Concurrent Orders and Inventory (No Overselling)
+
+When multiple users (e.g. Shayan and Hassan) submit orders for the **same product** and only **one unit** is in stock, the system ensures only one order succeeds and the other gets a clear failure:
+
+1. **Inventory Service – atomic decrease**  
+   Stock is decreased with a single conditional UPDATE in the database:  
+   `UPDATE ... SET available_stock = available_stock - :qty WHERE item_code = :code AND available_stock >= :qty`.  
+   Only one concurrent request can succeed; the other gets 0 rows updated and returns **409 Conflict** (Insufficient stock).
+
+2. **Order Service – reserve first, then create order**  
+   For each line item, Order Service calls Inventory to **decrease (reserve)** stock first. Only after **all** items are successfully reserved does it create the order and payment. If any reserve fails (409), it **compensates** by adding back stock for items already decreased, then returns 409 to the user. No order is created when stock is insufficient.
+
+3. **Result**  
+   One user gets **Order submitted**; the other gets **409** with a message like "Insufficient stock for item: ITEM-001. Available: 0, Requested: 2". No distributed locks; the database conditional update is the single source of truth.
+
 ## JWT Token Structure
 
 ```json
@@ -199,10 +234,12 @@ docker-compose up --build
 ```
 
 This will start all services:
+- Service Registry: http://localhost:8761
 - API Gateway: http://localhost:8080
 - User Service: http://localhost:8083
 - Order Service: http://localhost:8081
 - Inventory Service: http://localhost:8082
+- Payment Service: http://localhost:8084
 
 ### Using API Gateway
 

@@ -36,33 +36,39 @@ public class InventoryService {
         return response;
     }
 
+    /**
+     * Atomically decrease stock. Uses a conditional UPDATE in the database so that
+     * under concurrent requests (e.g. two users ordering the last unit), only one succeeds.
+     * Prevents overselling without distributed locks.
+     */
     @Transactional
     public DecreaseStockResponse decreaseStock(DecreaseStockRequest request) {
-        log.info("Decreasing stock for item code: {} by quantity: {}", request.getItemCode(), request.getQuantity());
-        
-        InventoryItem item = inventoryRepository.findByItemCode(request.getItemCode())
+        log.info("Decreasing stock for item code: {} by quantity: {} (atomic)", request.getItemCode(), request.getQuantity());
+
+        // Ensure item exists
+        inventoryRepository.findByItemCode(request.getItemCode())
                 .orElseThrow(() -> new RuntimeException("Inventory item not found with code: " + request.getItemCode()));
-        
-        if (item.getAvailableStock() < request.getQuantity()) {
-            log.warn("Insufficient stock for item {}. Available: {}, Requested: {}", 
+
+        int rowsUpdated = inventoryRepository.decreaseStockIfAvailable(request.getItemCode(), request.getQuantity());
+
+        if (rowsUpdated == 0) {
+            InventoryItem item = inventoryRepository.findByItemCode(request.getItemCode()).orElseThrow();
+            log.warn("Insufficient stock for item {}. Available: {}, Requested: {}",
                     request.getItemCode(), item.getAvailableStock(), request.getQuantity());
-            throw new RuntimeException("Insufficient stock. Available: " + item.getAvailableStock() + 
-                    ", Requested: " + request.getQuantity());
+            throw new RuntimeException("Insufficient stock for item: " + request.getItemCode() +
+                    ". Available: " + item.getAvailableStock() + ", Requested: " + request.getQuantity());
         }
-        
-        int newStock = item.getAvailableStock() - request.getQuantity();
-        item.setAvailableStock(newStock);
-        InventoryItem updatedItem = inventoryRepository.save(item);
-        
-        log.info("Stock decreased for item {}. Remaining stock: {}", request.getItemCode(), newStock);
-        
+
+        InventoryItem updatedItem = inventoryRepository.findByItemCode(request.getItemCode()).orElseThrow();
+        log.info("Stock decreased for item {}. Remaining stock: {}", request.getItemCode(), updatedItem.getAvailableStock());
+
         DecreaseStockResponse response = new DecreaseStockResponse();
         response.setItemCode(updatedItem.getItemCode());
         response.setItemName(updatedItem.getItemName());
         response.setQuantityDecreased(request.getQuantity());
         response.setRemainingStock(updatedItem.getAvailableStock());
         response.setSuccess(true);
-        
+
         return response;
     }
 

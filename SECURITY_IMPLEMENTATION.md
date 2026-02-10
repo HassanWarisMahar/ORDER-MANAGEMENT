@@ -96,7 +96,7 @@ Generates JWT token for service-to-service communication.
 
 ### 4. Service-to-Service Authentication via Gateway
 
-Order Service calls Inventory Service through the API Gateway. The gateway injects `X-Gateway-Token` into downstream requests to enforce gateway-only access.
+Order Service calls **Inventory Service** and **Payment Service** through the API Gateway. The gateway injects `X-Gateway-Token` into downstream requests to enforce gateway-only access. Protected routes include `/api/orders/**`, `/api/inventory/**`, `/api/products/**`, and `/api/payments/**`.
 
 ### 5. Configuration
 

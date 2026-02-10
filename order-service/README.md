@@ -2,15 +2,15 @@
 
 ## Overview
 
-Order Service is a microservice responsible for creating and managing orders. It validates item availability by communicating with the Inventory Service and confirms orders only when sufficient stock exists.
+Order Service creates and manages orders. It **reserves stock first** (atomic decrease in Inventory via Gateway), then creates the order and a payment record (Payment Service). This prevents overselling when multiple users order the same last unit: one gets the order, the other gets **409 Conflict** (Insufficient stock). For multi-item orders, if a later item fails to reserve, earlier reserves are **compensated** (stock added back) and no order is created.
 
 ## Technology Stack
 
 - **Java 25** (LTS)
-- **Spring Boot 3.3.5**
+- **Spring Boot 3.4.10**
 - **Spring Data JPA**
 - **SQLite**
-- **Spring WebFlux** (WebClient for inter-service communication)
+- **Spring WebFlux** (WebClient for Inventory and Payment via API Gateway)
 - **OpenAPI/Swagger** for API documentation
 - **JUnit 5** and **Mockito** for testing
 
@@ -33,7 +33,7 @@ The service follows a clean layered architecture:
 ## API Endpoints
 
 ### POST /api/orders
-Creates a new order after validating and decreasing stock in the Inventory Service.
+Reserves stock in Inventory (atomic decrease) for each item, then creates the order and a payment. If any reserve fails (e.g. insufficient stock), earlier reserves are compensated and **409 Conflict** is returned with no order created.
 
 **Request Body:**
 ```json
@@ -91,21 +91,22 @@ Retrieves an order by its ID.
 
 ## Inter-Service Communication
 
-The Order Service communicates with the Inventory Service using **WebClient** (reactive HTTP client) to:
+Order Service uses **WebClient** to call (via API Gateway):
 
-1. **Validate Stock Availability**: Before creating an order, it checks if sufficient stock is available
-2. **Decrease Stock**: After validation, it decreases the stock quantity in the Inventory Service
+1. **Inventory Service** – Reserve stock: `POST /api/inventory/decrease` (atomic). On failure (409), compensation: `POST /api/inventory/add` for already-reserved items. Then fetch item details for order lines.
+2. **Payment Service** – After order is saved: `POST /api/payments` to create a payment record.
 
 **Configuration:**
-- Default Inventory Service URL: `http://inventory-service:8082`
-- Configurable via `inventory.service.url` property or `INVENTORY_SERVICE_URL` environment variable
+- `inventory.service.url` / `INVENTORY_SERVICE_URL`: Inventory via Gateway (e.g. `http://localhost:8080`)
+- `payment.service.url` / `PAYMENT_SERVICE_URL`: Payment via Gateway
 
 ## Error Handling
 
-The service includes global exception handling via `@ControllerAdvice`:
+Global exception handling via `@ControllerAdvice`:
 
 - **400 Bad Request**: Validation errors
 - **404 Not Found**: Order not found
+- **409 Conflict**: Insufficient stock (from Inventory); no order created
 - **500 Internal Server Error**: Unexpected errors
 
 ## Local Development
@@ -159,7 +160,8 @@ docker build -t order-service:latest .
 
 ```bash
 docker run -p 8081:8081 \
-  -e INVENTORY_SERVICE_URL=http://inventory-service:8082 \
+  -e INVENTORY_SERVICE_URL=http://api-gateway:8080 \
+  -e PAYMENT_SERVICE_URL=http://api-gateway:8080 \
   order-service:latest
 ```
 
@@ -195,7 +197,8 @@ inventory:
 
 ### Environment Variables
 
-- `INVENTORY_SERVICE_URL`: Inventory Service URL (default: `http://inventory-service:8082`)
+- `INVENTORY_SERVICE_URL`: Inventory via Gateway (default: `http://localhost:8080`)
+- `PAYMENT_SERVICE_URL`: Payment via Gateway (default: `http://localhost:8084` or gateway URL)
 - `SERVER_PORT`: Server port (default: `8081`)
 
 ## Testing
