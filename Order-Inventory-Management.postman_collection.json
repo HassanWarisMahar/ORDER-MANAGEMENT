@@ -1,0 +1,199 @@
+{
+  "info": {
+    "_postman_id": "bfde0a70-6f41-46c3-ba96-6374808f4b0a",
+    "name": "Order-Inventory-Management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "36994600"
+  },
+  "item": [
+    {
+      "name": "get Order by Id",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ1c2VyMTIiLCJzZXJ2aWNlIjoidXNlci1zZXJ2aWNlIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzAxMDk4MjMsImV4cCI6MTc3MDE5NjIyM30.ojifMucdb6dQPIrvQdjH-Ja0z3jfB1s9keEtEsIn9cUyAzXIAYK6OZdx_OxyCkrcYfgHatPaqZpgZgwLAKsdSw",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer <token>"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/api/orders/1",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "orders",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "service-token",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"username\": \"user12\",\r\n    \"password\": \"password123\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/auth/service-token?serviceName=user-service",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "auth",
+            "service-token"
+          ],
+          "query": [
+            {
+              "key": "serviceName",
+              "value": "user-service"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "/api/inventory",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ1c2VyMTIiLCJzZXJ2aWNlIjoidXNlci1zZXJ2aWNlIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzAxMDk4MjMsImV4cCI6MTc3MDE5NjIyM30.ojifMucdb6dQPIrvQdjH-Ja0z3jfB1s9keEtEsIn9cUyAzXIAYK6OZdx_OxyCkrcYfgHatPaqZpgZgwLAKsdSw",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer <token>"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/inventory/ITEM-005",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "inventory",
+            "ITEM-005"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "api/auth/login",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"username\": \"user12\",\r\n    \"password\": \"password123\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/auth/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "auth/signup",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"username\": \"user12\",\r\n    \"email\": \"user@example.com\",\r\n    \"password\": \"password123\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/auth/signup",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "auth",
+            "signup"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
