@@ -23,11 +23,13 @@ public class GlobalExceptionHandler {
         if (message != null) {
             if (message.contains("not found")) {
                 status = HttpStatus.NOT_FOUND;
-            } else if (message.contains("already exists") || 
-                       message.contains("Invalid username") || 
+            } else if (message.contains("Insufficient stock")) {
+                status = HttpStatus.CONFLICT; // 409 - conflict with current state
+            } else if (message.contains("already exists") ||
+                       message.contains("Invalid username") ||
                        message.contains("Invalid password")) {
                 status = HttpStatus.BAD_REQUEST;
-            } else if (message.contains("Unauthorized") || 
+            } else if (message.contains("Unauthorized") ||
                        message.contains("Forbidden")) {
                 status = HttpStatus.FORBIDDEN;
             }

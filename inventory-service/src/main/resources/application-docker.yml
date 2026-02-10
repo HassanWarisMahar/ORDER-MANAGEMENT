@@ -18,6 +18,10 @@ spring:
     properties:
       hibernate:
         format_sql: false
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
 
 springdoc:
   api-docs:
