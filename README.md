@@ -29,11 +29,11 @@ Repository directory: `ORDER-MANAGEMENT`.
 
 ## 📋 Services
 
-### 0. Service Registry
+### 1. Service Registry
 - **Port**: 8761
 - **Responsibilities**: Eureka server for service discovery; enables load-balanced routing via the API Gateway.
 
-### 1. API Gateway
+### 2. API Gateway
 - **Port**: 8080
 - **Responsibilities**:
   - Centralized routing to all services
@@ -47,7 +47,7 @@ Repository directory: `ORDER-MANAGEMENT`.
   - Adds internal gateway token header to downstream services
   - Circuit breaker fallback responses
 
-### 2. User Service
+### 3. User Service
 - **Port**: 8083
 - **Responsibilities**:
   - User registration and authentication
@@ -56,7 +56,7 @@ Repository directory: `ORDER-MANAGEMENT`.
   - BCrypt password hashing
   - Signup and login endpoints
 
-### 3. Order Service
+### 4. Order Service
 - **Port**: 8081
 - **Responsibilities**:
   - Create and retrieve orders
@@ -67,7 +67,7 @@ Repository directory: `ORDER-MANAGEMENT`.
   - WebClient-based inter-service communication
   - Graceful error handling
 
-### 4. Inventory Service
+### 5. Inventory Service
 - **Port**: 8082
 - **Responsibilities**:
   - Manage inventory stock levels
@@ -78,7 +78,7 @@ Repository directory: `ORDER-MANAGEMENT`.
   - Conditional UPDATE in DB for concurrent-order safety
   - Returns 409 Conflict when stock is insufficient
 
-### 5. Payment Service
+### 6. Payment Service
 - **Port**: 8084
 - **Responsibilities**:
   - Create payment records when orders are placed (called by Order Service via Gateway)
@@ -236,24 +236,6 @@ mvn test
 - ✅ Integration tests for inter-service communication
 - ✅ Edge case testing
 - ✅ Error handling tests
-
-## ✅ CI/CD (Jenkins)
-
-This repo includes a `Jenkinsfile` that runs a full Maven build and tests for all services.
-
-### Jenkins Setup (Pipeline from SCM)
-
-1. Install Jenkins and configure a build agent with:
-   - JDK 25
-   - Maven 3.9+
-2. Create a new Pipeline job:
-   - Definition: "Pipeline script from SCM"
-   - SCM: Git
-   - Script Path: `Jenkinsfile`
-3. Run the job. It executes:
-   - `mvn -B -ntp clean verify`
-
-Artifacts (`**/target/*.jar`) and test reports (`**/target/surefire-reports/*.xml`) are archived automatically.
 
 ## 🐳 Docker
 
